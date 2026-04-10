@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cargando obra… · Audioguía Prado</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ── CABECERA ─────────────────────────────────────────────── -->
+<header class="site-header" id="site-header">
+  <a href="index.html?lista=1" class="back-btn" aria-label="Volver al listado">←</a>
+  <span class="header-title" id="header-title">Audioguía · Prado</span>
+  <span class="header-sala" id="header-sala"></span>
+</header>
+
+<!-- ── CONTENIDO PRINCIPAL ─────────────────────────────────── -->
+<main id="main-content">
+  <div class="spinner" id="loading"></div>
+</main>
+
+<!-- ── SCRIPTS ──────────────────────────────────────────────── -->
+<script src="js/data.js"></script>
+<script>
+// ══════════════════════════════════════════════════════════════
+//  obra.js — Ficha individual de obra
+//  Renderiza la obra cuyo id viene en ?id=N
+// ══════════════════════════════════════════════════════════════
+
+// VARIABLES DE ESTADO — deben declararse ANTES del bloque if/else
+// para evitar Temporal Dead Zone con `let`
+let audio, playing = false;
+let carouselIdx = 0;
+
+const params = new URLSearchParams(window.location.search);
+const obraId = parseInt(params.get('id'));
+const obra   = OBRAS.find(o => o.id === obraId);
+
+if (!obra) {
+  document.getElementById('main-content').innerHTML = `
+    <div class="empty-state">
+      <div class="empty-icon">🖼️</div>
+      <p>Obra no encontrada.</p>
+      <p><a href="index.html?lista=1">← Volver al listado</a></p>
+    </div>`;
+} else {
+  // Actualizar <title> y cabecera
+  document.title = `${obra.tituloCarta} · Audioguía Prado`;
+  document.getElementById('header-title').textContent = obra.autor || 'Audioguía Prado';
+  document.getElementById('header-sala').textContent = 'Sala ' + obra.sala;
+
+  // Renderizar la ficha
+  document.getElementById('loading').remove();
+  document.getElementById('main-content').innerHTML = construirFicha(obra);
+
+  // Inicializar componentes interactivos
+  inicializarAudio();
+  inicializarToggles();
+  if (obra.tipo === 'carousel') inicializarCarousel();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  CONSTRUCCIÓN HTML DE LA FICHA
+// ══════════════════════════════════════════════════════════════
+
+function construirFicha(o) {
+  return `
+    ${construirImagen(o)}
+    ${construirFichaCabecera(o)}
+    ${construirFichaTecnica(o)}
+    ${construirAudio(o)}
+    ${construirAnalisis(o)}
+    ${construirNavegacion(o)}
+  `;
+}
+
+// ── Imagen / Carrusel ──────────────────────────────────────────
+function construirImagen(o) {
+  if (o.tipo === 'carousel' && o.imgs && o.imgs.length > 1) {
+    const slides = o.imgs.map((src, i) => `
+      <div class="carousel-slide">
+        <img src="${src}" alt="${o.imgsLabel ? o.imgsLabel[i] : o.tituloCarta}" loading="eager">
+      </div>`).join('');
+    const dots = o.imgs.map((_, i) =>
+      `<button class="carousel-dot${i===0?' active':''}" data-idx="${i}" aria-label="Imagen ${i+1}"></button>`
+    ).join('');
+    const labels = o.imgsLabel ? o.imgsLabel.map((l, i) =>
+      `<span class="carousel-label" id="carousel-label" style="${i>0?'display:none':''}">${l}</span>`
+    )[0] : '';
+
+    return `
+      <div class="carousel" id="carousel">
+        <div class="carousel-track" id="carousel-track">${slides}</div>
+        ${labels}
+        <button class="carousel-arrow prev" onclick="moverCarousel(-1)" aria-label="Anterior">‹</button>
+        <button class="carousel-arrow next" onclick="moverCarousel(1)" aria-label="Siguiente">›</button>
+        <div class="carousel-nav">${dots}</div>
+      </div>`;
+  }
+  return `<img
+    class="obra-hero"
+    src="${o.img}"
+    alt="${o.tituloCarta}"
+    loading="eager"
+    onerror="this.style.background='#111';this.style.minHeight='200px'"
+  >`;
+}
+
+// ── Cabecera de la ficha ───────────────────────────────────────
+function construirFichaCabecera(o) {
+  const tags = [];
+  if (o.fecha)  tags.push(`<span class="ficha-tag">📅 ${o.fecha}</span>`);
+  if (o.estilo) tags.push(`<span class="ficha-tag">🎨 ${o.estilo}</span>`);
+
+  return `
+    <div class="ficha-header">
+      <h1 class="ficha-titulo">${o.tituloCarta}</h1>
+      <p class="ficha-autor">${o.autor}</p>
+      <div class="ficha-meta">${tags.join('')}</div>
+    </div>
+    ${o.intro ? `<div class="obra-intro">"${o.intro}"</div>` : ''}
+  `;
+}
+
+// ── Tabla técnica colapsable ───────────────────────────────────
+function construirFichaTecnica(o) {
+  const filas = [
+    ['Título completo', o.tituloCarta],
+    ['Autor',           o.autor],
+    ['Fecha',           o.fecha],
+    ['Estilo',          o.estilo],
+    ['Técnica',         o.tecnica],
+    ['Dimensiones',     o.dimensiones],
+    ['Sala (Prado)',     o.sala],
+  ].filter(f => f[1]);
+
+  const rows = filas.map(([k, v]) => `
+    <tr><td>${k}</td><td>${v}</td></tr>`).join('');
+
+  return `
+    <button class="ficha-tecnica-toggle" id="toggle-ficha" onclick="toggleFicha(this)">
+      <span>📋 Ficha técnica</span>
+      <span class="toggle-icon">▾</span>
+    </button>
+    <div class="ficha-tecnica-body" id="ficha-body">
+      <table class="ficha-table"><tbody>${rows}</tbody></table>
+    </div>
+  `;
+}
+
+// ── Reproductor de audio ───────────────────────────────────────
+function construirAudio(o) {
+  return `
+    <div class="audio-section">
+      <div class="audio-player">
+        <div class="audio-controls">
+          <button class="btn-play" id="btn-play" onclick="toggleAudio()" aria-label="Reproducir audioguía">
+            ▶
+          </button>
+          <div class="audio-info">
+            <div class="audio-label">🎙️ Audioguía</div>
+            <div class="audio-time" id="audio-time">0:00 / —</div>
+          </div>
+        </div>
+        <input
+          type="range"
+          class="audio-progress"
+          id="audio-progress"
+          min="0" max="100" value="0"
+          aria-label="Progreso del audio"
+          oninput="buscarAudio(this.value)"
+        >
+        <audio id="audio-el" preload="metadata">
+          <source src="${o.audio}" type="audio/mpeg">
+          Tu navegador no soporta audio HTML5.
+        </audio>
+      </div>
+    </div>
+  `;
+}
+
+// ── Bloques de análisis ────────────────────────────────────────
+function construirAnalisis(o) {
+  let html = '<div class="analisis-section">';
+
+  if (o.tipo === 'accordion' && o.accordion) {
+    // Caso especial: Frescos — 2 subfichas en acordeón principal
+    o.accordion.forEach((sub, si) => {
+      html += `
+        <div class="bloque-accordion">
+          <button class="bloque-toggle ${si===0?'open':''}" onclick="toggleBloque(this)">
+            <div class="bloque-toggle-left">
+              <span class="bloque-num">0${si+1}</span>
+              <span class="bloque-label">${sub.titulo}</span>
+            </div>
+            <span class="bloque-chevron">▾</span>
+          </button>
+          <div class="bloque-body ${si===0?'open':''}">
+            ${construirBloques(sub.bloques)}
+          </div>
+        </div>`;
+    });
+  } else {
+    html += construirBloques(o.bloques);
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function construirBloques(bloques) {
+  if (!bloques) return '<p style="padding:16px;color:#606070">Análisis no disponible.</p>';
+  const orden = [
+    ['formal',       '01', 'Análisis Formal'],
+    ['iconografico', '02', 'Análisis Iconográfico e Iconológico'],
+    ['interpretacion','03','Interpretación Sintetizada'],
+  ];
+  return orden.map(([key, num, titulo], i) => {
+    const bloque = bloques[key];
+    if (!bloque) return '';
+    const contenido = bloque.html || bloque;
+    // Limpiar tablas vacías y elementos basura del pandoc
+    const html_limpio = limpiarHtml(contenido);
+    return `
+      <div class="bloque-accordion">
+        <button class="bloque-toggle ${i===0?'open':''}" onclick="toggleBloque(this)">
+          <div class="bloque-toggle-left">
+            <span class="bloque-num">${num}</span>
+            <span class="bloque-label">${bloque.titulo || titulo}</span>
+          </div>
+          <span class="bloque-chevron">▾</span>
+        </button>
+        <div class="bloque-body ${i===0?'open':''}">
+          <div class="analisis-html">${html_limpio}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function limpiarHtml(html) {
+  if (!html) return '';
+  // Quitar atributos peligrosos/inútiles
+  return html
+    .replace(/\s*(class|style|id|data-[^=]*)="[^"]*"/g, '')
+    .replace(/<(script|link|meta)[^>]*>.*?<\/\1>/gi, '')
+    .replace(/<col\b[^>]*>/g, '')
+    .replace(/<colgroup>.*?<\/colgroup>/gs, '')
+    .replace(/<div>\s*<\/div>/g, '')
+    .trim();
+}
+
+// ── Navegación anterior / siguiente ───────────────────────────
+function construirNavegacion(o) {
+  const prev = OBRAS.find(x => x.id === o.id - 1);
+  const next = OBRAS.find(x => x.id === o.id + 1);
+  if (!prev && !next) return '';
+  return `
+    <nav style="display:flex;justify-content:space-between;padding:16px;border-top:1px solid #2E2E40;margin-top:8px;">
+      ${prev ? `<a href="obra.html?id=${prev.id}" style="font-size:13px;color:#9090A0;text-decoration:none;">← ${prev.tituloCarta.substring(0,28)}…</a>` : '<span></span>'}
+      ${next ? `<a href="obra.html?id=${next.id}" style="font-size:13px;color:#9090A0;text-decoration:none;text-align:right">${next.tituloCarta.substring(0,28)}… →</a>` : '<span></span>'}
+    </nav>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  INTERACTIVIDAD
+// ══════════════════════════════════════════════════════════════
+
+// ── Audio ──────────────────────────────────────────────────────
+function inicializarAudio() {
+  audio = document.getElementById('audio-el');
+  if (!audio) return;
+
+  // Cargar metadatos al inicializar (permite mostrar duración)
+  audio.load();
+
+  audio.addEventListener('loadedmetadata', () => {
+    document.getElementById('audio-time').textContent =
+      `0:00 / ${formatTime(audio.duration)}`;
+  });
+
+  audio.addEventListener('timeupdate', () => {
+    if (!audio.duration) return;
+    const pct = (audio.currentTime / audio.duration) * 100;
+    document.getElementById('audio-progress').value = pct;
+    document.getElementById('audio-time').textContent =
+      `${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`;
+  });
+
+  audio.addEventListener('ended', () => {
+    playing = false;
+    document.getElementById('btn-play').textContent = '▶';
+    document.getElementById('audio-progress').value = 0;
+  });
+
+  // Si el archivo no carga, mostrar error discreto
+  audio.addEventListener('error', () => {
+    document.getElementById('audio-time').textContent = 'Audio no disponible';
+  });
+}
+
+async function toggleAudio() {
+  if (!audio) return;
+
+  if (playing) {
+    audio.pause();
+    document.getElementById('btn-play').textContent = '▶';
+    playing = false;
+  } else {
+    try {
+      await audio.play();
+      document.getElementById('btn-play').textContent = '⏸';
+      playing = true;
+    } catch (err) {
+      // El navegador bloqueó la reproducción (frecuente en file://)
+      // En GitHub Pages esto no ocurrirá
+      document.getElementById('audio-time').textContent = 'Abre desde un servidor para reproducir';
+      console.warn('Audio bloqueado:', err.message);
+    }
+  }
+}
+
+function buscarAudio(val) {
+  if (!audio || !audio.duration) return;
+  audio.currentTime = (val / 100) * audio.duration;
+}
+
+function formatTime(sec) {
+  if (!sec || isNaN(sec)) return '—';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+// ── Toggles (ficha técnica) ────────────────────────────────────
+function inicializarToggles() { /* ya manejado inline */ }
+
+function toggleFicha(btn) {
+  btn.classList.toggle('open');
+  document.getElementById('ficha-body').classList.toggle('open');
+}
+
+// ── Acordeón de bloques ────────────────────────────────────────
+function toggleBloque(btn) {
+  const body = btn.nextElementSibling;
+  btn.classList.toggle('open');
+  body.classList.toggle('open');
+}
+
+// ── Carrusel ───────────────────────────────────────────────────
+function inicializarCarousel() {
+  document.querySelectorAll('.carousel-dot').forEach((dot, i) => {
+    dot.onclick = () => irASlide(i);
+  });
+}
+
+function moverCarousel(dir) {
+  const total = obra.imgs ? obra.imgs.length : 0;
+  irASlide((carouselIdx + dir + total) % total);
+}
+
+function irASlide(idx) {
+  carouselIdx = idx;
+  const track = document.getElementById('carousel-track');
+  if (track) track.style.transform = `translateX(-${idx * 100}%)`;
+
+  // Actualizar dots
+  document.querySelectorAll('.carousel-dot').forEach((d, i) =>
+    d.classList.toggle('active', i === idx));
+
+  // Actualizar label
+  const labelEl = document.getElementById('carousel-label');
+  if (labelEl && obra.imgsLabel) {
+    labelEl.textContent = obra.imgsLabel[idx] || '';
+  }
+}
+</script>
+
+</body>
+</html>

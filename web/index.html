@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Audioguía digital del Museo del Prado — 1º Bachillerato">
+  <title>Audioguía · Museo del Prado</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* Estilos específicos de la pantalla de inicio */
+    body { overflow-x: hidden; }
+
+    /* ── PANTALLA DE BIENVENIDA ── */
+    #screen-welcome {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px;
+      text-align: center;
+    }
+    .welcome-emblem {
+      width: 88px; height: 88px;
+      border: 2px solid #A08828;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 40px;
+      margin: 0 auto 28px;
+      background: rgba(212,175,55,0.06);
+    }
+    .welcome-supertitle {
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      color: #9090A0;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .welcome-title {
+      font-family: Georgia, serif;
+      font-size: clamp(24px, 7vw, 36px);
+      color: #D4AF37;
+      line-height: 1.2;
+      margin-bottom: 10px;
+    }
+    .welcome-sub {
+      font-size: 14px;
+      color: #9090A0;
+      margin-bottom: 40px;
+      max-width: 320px;
+    }
+    .welcome-actions { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 280px; }
+
+    /* ── PANTALLA PRINCIPAL (lista de obras) ── */
+    #screen-main { display: none; }
+
+    .main-header {
+      background: #1A1A24;
+      border-bottom: 1px solid #2E2E40;
+      padding: 14px 16px 12px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .main-header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .main-header-logo {
+      font-family: Georgia, serif;
+      font-size: 15px;
+      color: #D4AF37;
+      letter-spacing: 0.04em;
+    }
+    .main-header-count {
+      font-size: 12px;
+      color: #606070;
+    }
+
+    /* Contenido desplazable */
+    .main-content {
+      padding: 16px 16px 32px;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    /* Obras list */
+    #obras-list .obra-card-mini:not([data-visible="true"]) { display: none; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     PANTALLA 1: BIENVENIDA
+═══════════════════════════════════════════ -->
+<div id="screen-welcome">
+  <div class="welcome-emblem">🏛️</div>
+  <p class="welcome-supertitle">Museo del Prado</p>
+  <h1 class="welcome-title">Audioguía<br>de la Visita</h1>
+  <p class="welcome-sub">Explora 62 obras maestras con análisis de imagen y audio. 1º Bachillerato — Historia del Arte.</p>
+  <div class="welcome-actions">
+    <button class="home-btn" onclick="mostrarPantallaObras()">
+      🎧 Explorar obras
+    </button>
+    <a href="https://www.museodelprado.es/visita/plano" target="_blank" rel="noopener" class="home-btn-secondary">
+      🗺️ Plano del museo
+    </a>
+  </div>
+  <p class="home-footer">
+    Accede a cada ficha escaneando el QR junto a la obra.<br>
+    ¡Buena visita!
+  </p>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     PANTALLA 2: LISTA DE OBRAS
+═══════════════════════════════════════════ -->
+<div id="screen-main">
+
+  <div class="main-header">
+    <div class="main-header-top">
+      <span class="main-header-logo">🏛️ Audioguía · Prado</span>
+      <span class="main-header-count" id="obras-count"></span>
+    </div>
+
+    <!-- Barra de búsqueda -->
+    <div class="search-bar">
+      <span class="search-icon" aria-hidden="true">🔍</span>
+      <input
+        type="search"
+        id="search-input"
+        placeholder="Buscar obra o autor…"
+        autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+        oninput="filtrar()"
+      >
+    </div>
+
+    <!-- Chips de sala -->
+    <div class="sala-filter" id="sala-filter" role="group" aria-label="Filtrar por sala">
+      <button class="sala-chip active" data-sala="" onclick="filtrarSala(this, '')">Todas</button>
+      <!-- Los chips de salas se generan dinámicamente -->
+    </div>
+  </div>
+
+  <div class="main-content">
+    <div id="obras-list" class="obras-list" role="list">
+      <!-- Las cards se generan dinámicamente -->
+    </div>
+    <div id="empty-state" class="empty-state hidden">
+      <div class="empty-icon">🔎</div>
+      <p>No se encontraron obras con ese criterio.</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCRIPTS
+═══════════════════════════════════════════ -->
+<script src="js/data.js"></script>
+<script>
+// ── Estado de filtros ──────────────────────────────────────────
+let salaActiva = '';
+let textoBusqueda = '';
+
+// ── Inicialización ─────────────────────────────────────────────
+function init() {
+  generarChipsSalas();
+  renderizarObras();
+}
+
+// ── Pantalla de bienvenida → lista ─────────────────────────────
+function mostrarPantallaObras() {
+  document.getElementById('screen-welcome').style.display = 'none';
+  document.getElementById('screen-main').style.display = 'block';
+  init();
+}
+
+// ── Generar chips de salas únicas ──────────────────────────────
+function generarChipsSalas() {
+  const salas = [...new Set(OBRAS.map(o => o.sala))].sort((a, b) => {
+    const na = parseInt(a), nb = parseInt(b);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return a.localeCompare(b);
+  });
+
+  const container = document.getElementById('sala-filter');
+  salas.forEach(sala => {
+    const btn = document.createElement('button');
+    btn.className = 'sala-chip';
+    btn.dataset.sala = sala;
+    btn.textContent = 'Sala ' + sala;
+    btn.onclick = function() { filtrarSala(this, sala); };
+    container.appendChild(btn);
+  });
+}
+
+// ── Renderizar lista de obras ──────────────────────────────────
+function renderizarObras() {
+  const lista = document.getElementById('obras-list');
+  lista.innerHTML = '';
+
+  const q = textoBusqueda.toLowerCase().trim();
+  let visibles = 0;
+
+  OBRAS.forEach(obra => {
+    const coincideTexto = !q ||
+      obra.tituloCarta.toLowerCase().includes(q) ||
+      obra.autor.toLowerCase().includes(q) ||
+      obra.sala.includes(q);
+    const coincideSala = !salaActiva || obra.sala === salaActiva;
+    const visible = coincideTexto && coincideSala;
+
+    if (visible) visibles++;
+
+    const card = crearCardMini(obra, visible);
+    lista.appendChild(card);
+  });
+
+  // Estado vacío
+  document.getElementById('empty-state').classList.toggle('hidden', visibles > 0);
+  document.getElementById('obras-count').textContent =
+    visibles === OBRAS.length ? `${OBRAS.length} obras` : `${visibles} de ${OBRAS.length}`;
+}
+
+// ── Crear card mini ────────────────────────────────────────────
+function crearCardMini(obra, visible) {
+  const a = document.createElement('a');
+  a.className = 'obra-card-mini';
+  a.href = `obra.html?id=${obra.id}`;
+  a.setAttribute('role', 'listitem');
+  a.dataset.visible = visible;
+
+  const iconoTipo = obra.tipo === 'carousel' ? ' 🖼️' : obra.tipo === 'accordion' ? ' 📂' : '';
+
+  a.innerHTML = `
+    <img
+      class="obra-thumb"
+      src="${obra.img}"
+      alt="${obra.tituloCarta}"
+      loading="lazy"
+      onerror="this.style.background='#22222F';this.removeAttribute('src')"
+    >
+    <div class="obra-card-info">
+      <div class="obra-card-titulo">${obra.tituloCarta}${iconoTipo}</div>
+      <div class="obra-card-autor">${obra.autor}</div>
+    </div>
+    <span class="obra-card-sala">Sala ${obra.sala}</span>
+  `;
+  return a;
+}
+
+// ── Filtros ────────────────────────────────────────────────────
+function filtrar() {
+  textoBusqueda = document.getElementById('search-input').value;
+  renderizarObras();
+}
+
+function filtrarSala(btn, sala) {
+  salaActiva = sala;
+  document.querySelectorAll('.sala-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  renderizarObras();
+  // Auto-scroll al inicio de la lista
+  document.getElementById('obras-list').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Auto-iniciar si venimos directamente a index (sin bienvenida)
+const params = new URLSearchParams(window.location.search);
+if (params.get('lista') === '1') {
+  mostrarPantallaObras();
+}
+</script>
+
+</body>
+</html>
