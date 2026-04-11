@@ -3,7 +3,7 @@
 //  Estrategia: Cache-First (funciona sin conexión)
 // ══════════════════════════════════════════════════════════════
 
-const CACHE_NAME = 'audioguia-prado-v1';
+const CACHE_NAME = 'audioguia-prado-v2';
 
 // Todos los recursos que se guardarán en caché al instalar
 const RECURSOS = [
@@ -17,8 +17,9 @@ const RECURSOS = [
 
   // ── Manifest e iconos ─────────────────────────────────────────
   './manifest.json',
-  './assets/icons/icon-192.svg',
-  './assets/icons/icon-512.svg',
+  './assets/icons/icon-192.png',
+  './assets/icons/icon-512.png',
+  './assets/icons/apple-touch-icon.png',
 
   // ── Imágenes ─────────────────────────────────────────────────
   './assets/images/sala_7a_david_goliat.webp',
