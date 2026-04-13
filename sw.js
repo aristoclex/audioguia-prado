@@ -3,7 +3,7 @@
 //  Estrategia: Cache-First (funciona sin conexión)
 // ══════════════════════════════════════════════════════════════
 
-const CACHE_NAME = 'audioguia-prado-v3';
+const CACHE_NAME = 'audioguia-prado-v4';
 
 // Todos los recursos que se guardarán en caché al instalar
 const RECURSOS = [
